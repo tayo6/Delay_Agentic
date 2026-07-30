@@ -1,0 +1,27 @@
+name: Retry Watchdog
+on:
+  schedule:
+    - cron: '*/15 * * * *'   # poll every ~15 min (GitHub may delay under load)
+  workflow_dispatch:
+jobs:
+  retry-flaky-runs:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Rerun recent flaky Gemini failures under the 3-try cap
+        env:
+          GH_TOKEN: ${{ github.token }}   # if reruns silently no-op, see note below
+          REPO: ${{ github.repository }}
+        run: |
+          # Build is intentionally NOT listed: build bugs go to Auto-Fix, build
+          # network flakiness is handled inside setup-build-deps. Rerunning a run
+          # that died at action-resolution costs no Gemini tokens, so this is safe.
+          gh api "repos/$REPO/actions/runs?status=failure&per_page=50" \
+            --jq '.workflow_runs[] | select(.name=="Gemini Agent" or .name=="Gemini Triage" or .name=="Gemini PR Review") | select(.run_attempt < 3) | select((now - (.created_at|fromdateiso8601)) < 3600) | "\(.id) \(.run_attempt) \(.name)"' \
+          | while read -r id attempt name; do
+              echo "==> $name run $id (attempt $attempt): rerunning failed jobs"
+              gh run rerun "$id" --failed || true
+              sleep 3
+            done
+          echo "Watchdog pass complete."
