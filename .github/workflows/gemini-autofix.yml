@@ -1,0 +1,39 @@
+name: Gemini Auto-Fix
+on:
+  workflow_run:
+    workflows: ["Build VST3"]
+    types: [completed]
+jobs:
+  fix:
+    # LOOP GUARD: one repair per human commit. A build whose failing commit is
+    # already tagged [autofix] is skipped, so a still-broken repair stops instead of looping.
+    if: >-
+      github.event.workflow_run.conclusion == 'failure' &&
+      !contains(github.event.workflow_run.head_commit.message || '', '[autofix]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: autofix-${{ github.event.workflow_run.head_branch }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_branch }}
+      - uses: ./.github/actions/setup-build-deps
+      - name: Get failed build log
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run view ${{ github.event.workflow_run.id }} --log-failed > build-error.log
+      - uses: ./.github/actions/run-gemini
+        with:
+          gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
+          prompt: |
+            The build failed - see build-error.log. Find the bug, fix it, verify with
+            "cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --config Release -j2",
+            then commit and push DIRECTLY to this branch (no PR). Begin the commit message
+            with "[autofix]" - that tag is what stops the loop, never omit it.
+          settings: |
+            {"coreTools": ["run_shell_command", "read_file", "write_file", "replace", "list_directory"]}
