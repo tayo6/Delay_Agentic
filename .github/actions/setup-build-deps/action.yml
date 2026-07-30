@@ -1,0 +1,17 @@
+name: Setup build dependencies
+description: apt packages needed to compile the JUCE VST3, with a 3-try retry on flaky network.
+runs:
+  using: composite
+  steps:
+    - name: apt-get install (retry x3)
+      shell: bash
+      run: |
+        for i in 1 2 3; do
+          sudo apt-get update && sudo apt-get install -y \
+            libasound2-dev libx11-dev libxcomposite-dev libxcursor-dev libxext-dev \
+            libxinerama-dev libxrandr-dev libxrender-dev libfreetype6-dev \
+            libcurl4-openssl-dev libglu1-mesa-dev mesa-common-dev pkg-config \
+            && { echo "deps ok"; break; }
+          echo "apt failed (try $i), retrying in 15s..."; sleep 15
+          [ "$i" -eq 3 ] && { echo "::error::apt-get failed after 3 tries"; exit 1; }
+        done
