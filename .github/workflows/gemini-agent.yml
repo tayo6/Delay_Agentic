@@ -1,0 +1,36 @@
+name: Gemini Agent
+
+on:
+  issues:
+    types: [opened]
+  issue_comment:
+    types: [created]
+
+jobs:
+  agent:
+    if: github.event_name == 'issues' || contains(github.event.comment.body, '@gemini-cli')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libx11-dev libxcomposite-dev \
+            libxcursor-dev libxext-dev libxinerama-dev libxrandr-dev libxrender-dev \
+            libfreetype6-dev libcurl4-openssl-dev libglu1-mesa-dev mesa-common-dev pkg-config
+      - name: Run Gemini
+        uses: google-github-actions/run-gemini-cli@v1
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        with:
+          prompt: |
+            Task from issue "${{ github.event.issue.title }}":
+            ${{ github.event.issue.body }}
+            ${{ github.event.comment.body }}
+          settings: |
+            {"coreTools": ["run_shell_command", "read_file", "write_file", "replace", "list_directory"]}
