@@ -1,14 +1,25 @@
 name: Retry Watchdog
 on:
+  workflow_run:
+    workflows: ["Gemini Agent", "Gemini Triage", "Gemini PR Review"]
+    types: [completed]
   schedule:
-    - cron: '*/2 * * * *'   # poll every ~2 min (GitHub may delay this under load — not a hard guarantee)
+    - cron: '*/5 * * * *'   # backstop only — 5 min is GitHub's actual minimum granularity, and even
+                             # this can be delayed under load. Do not rely on it for exact timing.
   workflow_dispatch:
 jobs:
   retry-flaky-runs:
+    if: >-
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'failure'
     runs-on: ubuntu-latest
     permissions:
       actions: write
     steps:
+      - name: Wait 2 minutes before retrying (only meaningful on the direct trigger)
+        if: github.event_name == 'workflow_run'
+        run: sleep 120
+
       - name: Rerun recent flaky Gemini failures under the 20-try cap
         env:
           GH_TOKEN: ${{ github.token }}   # if reruns silently no-op, see note below
