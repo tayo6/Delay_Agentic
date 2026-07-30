@@ -1,0 +1,36 @@
+name: Gemini Agent
+on:
+  issues:
+    types: [opened]
+  issue_comment:
+    types: [created]
+jobs:
+  agent:
+    # Summoned only. A plain new issue is handled by Triage (labels only). This
+    # stops a code-writing agent running on every untrusted issue body.
+    if: >-
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@gemini-cli')) ||
+      (github.event_name == 'issues' && contains(github.event.issue.body, '@gemini-cli'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: gemini-agent-issue-${{ github.event.issue.number }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-build-deps
+      - uses: ./.github/actions/run-gemini
+        with:
+          gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
+          prompt: |
+            Task from issue #${{ github.event.issue.number }} "${{ github.event.issue.title }}":
+            ${{ github.event.issue.body }}
+            ${{ github.event.comment.body }}
+            Follow GEMINI.md. This is normal feature work (you were summoned with @gemini-cli),
+            so use a NEW branch + pull request, and do NOT use the [autofix] commit tag.
+          settings: |
+            {"coreTools": ["run_shell_command", "read_file", "write_file", "replace", "list_directory"]}
