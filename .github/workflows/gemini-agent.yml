@@ -17,17 +17,27 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@v4
+
+      - name: Check API key is set
+        run: |
+          if [ -z "${{ secrets.GEMINI_API_KEY }}" ]; then
+            echo "::error::GEMINI_API_KEY secret is missing. Add it under Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+
       - name: Install build dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libasound2-dev libx11-dev libxcomposite-dev \
             libxcursor-dev libxext-dev libxinerama-dev libxrandr-dev libxrender-dev \
             libfreetype6-dev libcurl4-openssl-dev libglu1-mesa-dev mesa-common-dev pkg-config
+
       - name: Run Gemini
-        uses: google-github-actions/run-gemini-cli@v1
+        uses: google-github-actions/run-gemini-cli@v0
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         with:
+          gemini_debug: 'true'
           prompt: |
             Task from issue "${{ github.event.issue.title }}":
             ${{ github.event.issue.body }}
